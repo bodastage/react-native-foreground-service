@@ -25,8 +25,7 @@ import static com.voximplant.foregroundservice.Constants.ERROR_INVALID_CONFIG;
 import static com.voximplant.foregroundservice.Constants.ERROR_SERVICE_ERROR;
 import static com.voximplant.foregroundservice.Constants.NOTIFICATION_CONFIG;
 import static com.voximplant.foregroundservice.Constants.FOREGROUND_SERVICE_BUTTON_PRESSED;
-
-
+import static com.voximplant.foregroundservice.Constants.ERROR_FGS_TYPE_MISSING;
 
 public class VIForegroundServiceModule extends ReactContextBaseJavaModule {
 
@@ -70,13 +69,20 @@ public class VIForegroundServiceModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void startService(ReadableMap notificationConfig, Promise promise) {
+    public void startService(ReadableMap notificationConfig,  @Nullable Integer foregroundServiceType, Promise promise) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (foregroundServiceType == null) {
+                promise.reject(ERROR_FGS_TYPE_MISSING, "VIForegroundService: Foreground service type is required");
+                return;
+            }
+        }
+
         if (notificationConfig == null) {
             promise.reject(ERROR_INVALID_CONFIG, "VIForegroundService: Notification config is invalid");
             return;
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) { // if device is running android 8 and above
             if (!notificationConfig.hasKey("channelId")) {
                 promise.reject(ERROR_INVALID_CONFIG, "VIForegroundService: channelId is required");
                 return;
@@ -106,17 +112,23 @@ public class VIForegroundServiceModule extends ReactContextBaseJavaModule {
         Intent intent = new Intent(getReactApplicationContext(), VIForegroundService.class);
         intent.setAction(Constants.ACTION_FOREGROUND_SERVICE_START);
         intent.putExtra(NOTIFICATION_CONFIG, Arguments.toBundle(notificationConfig));
+        intent.putExtra("foregroundServiceType", foregroundServiceType);
         ComponentName componentName = getReactApplicationContext().startService(intent);
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(FOREGROUND_SERVICE_BUTTON_PRESSED);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getReactApplicationContext().registerReceiver(foregroundReceiver, filter, null, null, Context.RECEIVER_NOT_EXPORTED);
-        } else {
+            getReactApplicationContext().registerReceiver(
+                foregroundReceiver, 
+                filter, 
+                null, 
+                null, 
+                Context.RECEIVER_NOT_EXPORTED
+            );
+        } else { 
             getReactApplicationContext().registerReceiver(foregroundReceiver, filter);
         }
-
-
 
         if (componentName != null) {
             promise.resolve(null);
